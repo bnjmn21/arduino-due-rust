@@ -10,7 +10,7 @@ license = "MIT"
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.10"
 panic-halt = "0.2.0"
-sam3x8e = { version = "0.1", features = ["rt"], git = "https://github.com/sdroege/sam3x8e.git" }
+#sam3x8e = { version = "0.1", features = ["rt"], git = "https://github.com/sdroege/sam3x8e.git" }
 
 [[bin]]
 name = "app"
