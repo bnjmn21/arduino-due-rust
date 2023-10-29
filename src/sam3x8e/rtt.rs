@@ -1,4 +1,7 @@
-use super::{register_type, RegisterField, RegisterReader, RegisterType, RegisterWriter, RO, RW};
+use super::{
+    from_mut_ptr, register_type, MaskedRegisterWriter, RegisterField, RegisterReader, RegisterType,
+    RegisterWriter, Ro, Rw,
+};
 
 register_type!(
     Mode;
@@ -16,10 +19,10 @@ register_type!(
 
 #[repr(C)]
 struct RegisterBlock {
-    pub mode: RW<Mode>,
-    pub alarm: RW<u32>,
-    pub value: RO<u32>,
-    pub status: RO<Status>,
+    pub mode: Rw<Mode>,
+    pub alarm: Rw<u32>,
+    pub value: Ro<u32>,
+    pub status: Ro<Status>,
 }
 
 pub struct TimerStatus {
@@ -34,7 +37,7 @@ pub struct RealTimeTimer {
 impl RealTimeTimer {
     pub fn new() -> RealTimeTimer {
         RealTimeTimer {
-            register_block: unsafe { &mut *(0x400E1A30 as *mut RegisterBlock) },
+            register_block: unsafe { from_mut_ptr!(0x400E1A30, RegisterBlock) },
         }
     }
 
