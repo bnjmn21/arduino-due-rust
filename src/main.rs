@@ -1,56 +1,67 @@
 #![no_std]
 #![no_main]
 
-//extern crate sam3x8e;
-//use sam3x8e::RTT;
-#[allow(dead_code)]
-mod sam3x8e;
+mod config;
 mod schedule;
+extern crate alloc;
+extern crate panic_halt;
+extern crate sam3x8e; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
-extern crate panic_halt; // you can put a breakpoint on `rust_begin_unwind` to catch panics
-
+use config::HEAP_SIZE;
+use core::mem::MaybeUninit;
 use cortex_m_rt::entry;
-/*use sam3x8e::pio::IoLine;
-use sam3x8e::pmc::PeripheralClockAreas;
-use sam3x8e::rtt::ModeAreas;
+use embedded_alloc::Heap;
+use sam3x8e::PIOB;
+use schedule::Scheduler;
 
-fn delay_ms(rtt: &sam3x8e::rtt::Rtt, ms: u32) {
-    // We're not considering overflow here, 32 bits can keep about 49 days in ms
-    let now = unsafe { rtt.value.read() };
-    let until = now + ms;
+const BLINK_TIME: u32 = 1000;
 
-    while unsafe { rtt.value.read() } < until {}
-}*/
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+
+unsafe fn init_alloc() {
+    static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+    HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE);
+}
+
+static mut PIO_B: MaybeUninit<PIOB> = MaybeUninit::uninit();
 
 #[entry]
 fn main() -> ! {
-    /*const LED_PIN: IoLine = IoLine::L27;
-    const DELAY: u32 = 1000;
+    unsafe {
+        init_alloc();
+    }
 
-    let piob = sam3x8e::pio::pio_b(); //parallel input output controller b
-    let pmc = sam3x8e::pmc::pmc(); //power management controller
-    let rtt = sam3x8e::rtt::rtt(); //real-time timer
+    let p = sam3x8e::Peripherals::take().unwrap();
+    let piob = p.PIOB;
+    let pmc = p.PMC;
+    let rtt = p.RTT;
+
+    pmc.pmc_pcer0.write_with_zero(|w| w.pid12().set_bit());
+
+    piob.per.write_with_zero(|w| w.p27().set_bit());
+    piob.oer.write_with_zero(|w| w.p27().set_bit());
+    piob.pudr.write_with_zero(|w| w.p27().set_bit());
 
     unsafe {
-        // Enable PIOB
-        pmc.peripheral_clock_0
-            .write_area(PeripheralClockAreas::PeripheralClock12, 1);
+        PIO_B = MaybeUninit::new(piob);
+    }
 
-        // Configure RTT resolution to approx. 1ms
-        rtt.mode.write_area(ModeAreas::Prescaler, 0x20);
-
-        // Configure PIOB pin 27 (LED)
-        piob.pio.set.write_area(LED_PIN, 1);
-        piob.output.set.write_area(LED_PIN, 1);
-        piob.pull_up_disable.set.write_area(LED_PIN, 1);
-
-        // On/off blinking
-        loop {
-            piob.output_data.set.write_area(LED_PIN, 1);
-            delay_ms(&rtt, DELAY);
-            piob.output_data.reset.write_area(LED_PIN, 1);
-            delay_ms(&rtt, DELAY);
-        }
-    }*/
-    todo!()
+    let mut scheduler = Scheduler::new(rtt);
+    scheduler.push(
+        |s| unsafe {
+            PIO_B
+                .assume_init_ref()
+                .sodr
+                .write_with_zero(|w| w.p27().set_bit());
+            s.yield_for(BLINK_TIME);
+            PIO_B
+                .assume_init_ref()
+                .codr
+                .write_with_zero(|w| w.p27().set_bit());
+            s.repeat_in(BLINK_TIME);
+        },
+        0,
+    );
+    scheduler.main_loop();
 }
